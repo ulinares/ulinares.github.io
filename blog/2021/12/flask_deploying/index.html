@@ -1,0 +1,60 @@
+<!doctype html> <html lang=en > <meta charset=UTF-8 > <meta name=viewport  content="width=device-width, initial-scale=1"> <link rel=stylesheet  href="/libs/highlight/github.min.css"> <link rel=stylesheet  href="/css/franklin.css"> <link rel=stylesheet  href="/css/basic.css"> <link rel=icon  href="/assets/favicon.png"> <title>Desplegando una app de Flask</title> <header> <div class=blog-name ><a href="/">Uziel Linares</a></div> <nav> <ul> <li><a href="/">Home</a> <li><a href="/blog/">Blog</a> <li><a href="/projects/">Proyectos</a> </ul> <img src="/assets/hamburger.svg" id=menu-icon > </nav> </header> <div class=franklin-content > <p>Desplegar una aplicación de <em>Flask</em> es una tarea sencilla, básicamente esto consiste en lo siguiente:</p> <ul> <li><p>Servir la aplicación mediante un servidor más robusto que el que viene cargado por default en <em>Flask</em>.</p> <li><p>Habilitar la app como un servicio del sistema para garantizar que se encuentre siempre &quot;encendida&quot;.</p> <li><p>Agregar las reglas necesarias al <em>firewall</em>&#40;si es que se cuenta con uno&#41; para permitir las conexiones entrantes.</p> </ul> <p>A manera de ejemplo supongamos que nuestra aplicación es de la forma siguiente</p> <p><strong>server.py</strong></p> <pre><code class="python hljs"><span class=hljs-keyword >from</span> flask <span class=hljs-keyword >import</span> Flask
+
+app = Flask(__name__)
+
+<span class=hljs-meta >@app.route(<span class=hljs-params ><span class=hljs-string >&#x27;/&#x27;</span></span>)</span>
+<span class=hljs-keyword >def</span> <span class="hljs-title function_">index</span>():
+    <span class=hljs-keyword >return</span> <span class=hljs-string >&#x27;Hola mundo, estoy vivo!&#x27;</span></code></pre> <p>El primer paso a realizar es instalar un servidor más robusto que el que viene por default con <em>Flask</em>, una opción sencilla es <a href="https://gunicorn.org/">gunicorn</a>. Para esto debemos activar el ambiente virtual de nuestra aplicación&#40;tener un ambiente virtual no es estrictamente necesario, sin embargo, vuelve todo más limpio y fácil de mantener&#41; y posteriormente instalar <em>gunicorn</em> mediante <code>pip</code> </p> <pre><code class="bash hljs"><span class=hljs-built_in >source</span> venv/bin/activate
+pip install gunicorn</code></pre> <p>Una vez instalado <em>gunicorn</em> es posible servir nuestra aplicación mediante él, esto se consigue a través del siguiente comando</p> <pre><code class="bash hljs">gunicorn --<span class=hljs-built_in >bind</span> 0.0.0.0:5000 server:app --workers=2</code></pre>
+<p>En lo anterior lo que hemos hecho es servir nuestra aplicación <code>app</code> dentro del script de python <code>server.py</code> a través del puerto 5000 y empleando 2 procesos para atender las peticiones a esta aplicación. Si todo es correcto debemos ver el siguiente mensaje indicando que el servidor de <em>gunicorn</em> está corriendo y sirviendo correctamente nuestra aplicación</p>
+<p><img src="/assets/gunicorn_init.png" alt=gunicorn  /></p>
+<p>Una vez que sabemos que nuestra aplicación funciona correctamente con <em>gunicorn</em>, es momento de generar los archivos de configuración para habilitar nuestra aplicación como un servicio de <em>Linux</em>, para esto editamos el siguiente archivo&#40;o lo creamos&#41; </p>
+<p><strong>/etc/systemd/system/myapp.service</strong></p>
+<pre><code class="bash hljs">[Unit]
+Description=Este es un servicio para servir a mi app de Flask.
+After=network.target
+
+[Service]
+User=usuario
+Group=grupo
+WorkingDirectory=/ruta_app
+Environment=<span class=hljs-string >&quot;PATH=/ruta_al_venv_app&quot;</span>
+ExecStart=/ruta_app/venv/bin/guinicorn --workers=2 --<span class=hljs-built_in >bind</span> 0.0.0.0:5000 server:app
+
+[Install]
+WantedBy=multi-user.target</code></pre>
+<p>En donde el significado de algunas opciones es:</p>
+<ul>
+<li><p><strong>After</strong>: indica al sistema cuándo iniciar esta unidad de servicio, en este caso estamos ordenando que el servicio se &quot;levante&quot; posterior a haber habilitado los servicios de networking.</p>
+
+<li><p><strong>User/Group</strong>: define mediante qué usuario/grupo será lanzado el servicio, si se omiten, por default se lanza mediante <code>root</code>.</p>
+
+<li><p><strong>WorkingDirectory</strong>: ruta en donde se encuentra nuestra app.</p>
+
+<li><p><strong>Environment</strong>: estamos usando esta opción para exportar la variable PATH, la cuál indicará al sistema en dónde buscar los paquetes necesarios que nuestra aplicación podría necesitar, en este caso queremos que apunte a la carpeta con los binarios del entorno virtual de nuestra app&#40;.../venv/bin&#41;.</p>
+
+<li><p><strong>ExecStart</strong>: es el comando que el sistema ejecutará al levantar este servicio, en nuestro caso queremos que se ponga en marcha el servidor de <em>gunicorn</em>.</p>
+
+<li><p><strong>WantedBy</strong>: esto sirve para que nuestra app inicie cuando se inicia el sistema, para esto hacemos que este servicio sea requerido por <code>multi-user.target</code> el cual es un conjunto de servicios que se inician cuando el sistema se &quot;levanta&quot;, dicho de otro modo <code>multi-user.target</code> es un estado del sistema en el cuál ya se encuentra listo para operar. Generalmente se usa este target para indicar que el servicio debe &quot;levantarse&quot; al iniciar el sistema.</p>
+
+</ul>
+<p><strong>Nota</strong>: Si te interesa saber más acerca de <em>systemd</em> y las unidades de servicios, puedes encontrar información útil <a href="https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/system_administrators_guide/sect-managing_services_with_systemd-unit_files">aquí</a>, también <a href="https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/system_administrators_guide/chap-Managing_Services_with_systemd#tabl-Managing_Services_with_systemd-Introduction-Units-Types">aquí</a> y en este <a href="https://www.digitalocean.com/community/tutorials/understanding-systemd-units-and-unit-files">blog post</a>.</p>
+<p>Habiendo configurado este archivo sólo nos hace falta habilitar e iniciar el servicio mediante <code>systemctl</code></p>
+<pre><code class="bash hljs">sudo systemctl start myapp
+sudo systemctl <span class=hljs-built_in >enable</span> myapp</code></pre>
+<p>Si todo está correcto, al ejecutar <code>systemctl myapp</code> deberíamos ver un mensaje como el siguiente</p>
+<p><img src="/assets/app_status.png" alt="myapp status" /></p>
+<p>Por último, sólo falta configurar el firewall&#40;si es que el sistema tiene alguno instalado&#41; para permitir las conexiones entrantes por el puerto sobre el cual montamos la aplicación, en este caso en particular hemos lanzado la aplicación sobre el puerto 5000, por lo que es suficiente ejecutar&#40;si se cuenta con un firewall distinto a <code>ufw</code> necesitarás buscar las instrucciones apropiadas&#41;</p>
+<pre><code class="bash hljs">sudo ufw allow 5000
+sudo ufw status</code></pre>
+<p>Tras ejecturar lo anterior estamos habilitando las conexiones a través del puerto 5000 y posteriormente listando todas las reglas que tiene definido el firewall, por lo que al ejecutar <code>sudo ufw status</code> deberíamos observar una pantalla como la siguiente</p>
+<p><img src="/assets/ufw_status.png" alt=ufw_status  /></p>
+<p>Aquí vemos como ha sido agregada a las reglas del firewall las conexiones por el puerto <code>5000</code>. Hecho esto podremos acceder a la app externamente visitando <code>http://ip_address:5000</code>.</p>
+<p>Lo expuesto aquí es la manera más sencilla y rápida de poner &quot;online&quot; una app de <em>Flask</em>, aunque esto es funcional no es la mejor manera de hacerlo, pues esto requiere de abrir puertos extra para cada app que alojemos en el servidor, una mejor forma de hacer esto es poner a escuchar nuestra app a través de un <em>Unix socket</em> y posteriormente redireccionar el trafico de manera adecuada a este socket, de esta forma se podrían tener varias aplicaciones dentro del mismo servidor y sólo habilitar un puerto que escuche todas las conexiones. De este modo podríamos redirigir las peticiones al <em>socket</em> correcto dependiendo de qué recurso&#40;app&#41; se está solicitando&#40;esto puede hacerse con Nginx y será parte de otro post&#41;. </p>
+<p>Fin.</p>
+<div class=page-foot >
+  <div class=copyright >
+    &copy; Uziel Linares. Last modified: December 05, 2021. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>.
+  </div>
+</div>
+</div>
