@@ -3,8 +3,8 @@
 
 # Hola a todos!
 
-Hey! Estás en mi blog personal, aquí escribiré de matemáticas, cómputo y (aveces) de física,
-espero que encuentres algo interesante por aquí.
+Hey! Estás en mi blog personal, aquí escribiré de matemáticas, cómputo
+y otras cosas de mi interés, espero que encuentres algo de utilidad por aquí.
 
 
 Saludos!
